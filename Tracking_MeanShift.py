@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import os
 
 roi_defined = False
  
@@ -20,7 +21,13 @@ def define_ROI(event, x, y, flags, param):
 		c = min(c,c2)  
 		roi_defined = True
 
-cap = cv2.VideoCapture('../Sequences/Antoine_Mug.mp4')
+cwd = os.getcwd()
+print(cwd)
+
+# Open the video file
+dir_path = os.path.dirname(os.path.realpath(__file__))
+video_path = os.path.join(dir_path, 'Test-Videos', 'VOT-Ball.mp4')
+cap = cv2.VideoCapture(video_path)
 
 # take first frame of the video
 ret,frame = cap.read()
@@ -63,16 +70,23 @@ cv2.normalize(roi_hist,roi_hist,0,255,cv2.NORM_MINMAX)
 # or move by less than 1 pixel
 term_crit = ( cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1 )
 
-
 cpt = 1
 while(1):
     ret ,frame = cap.read()
     if ret == True:
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-	# Backproject the model histogram roi_hist onto the 
-	# current image hsv, i.e. dst(x,y) = roi_hist(hsv(0,x,y))
-        dst = cv2.calcBackProject([hsv],[0],roi_hist,[0,180],1)
-
+        
+        # Display Hue Image
+        hue_image = hsv[:,:,0]
+        cv2.imshow('Hue Channel', hue_image)
+        
+		# Backproject the model histogram roi_hist onto the 
+		# current image hsv, i.e. dst(x,y) = roi_hist(hsv(0,x,y))
+        dst = cv2.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
+        
+        # Display Weight Image
+        cv2.imshow('BackProjection', dst)
+        
         # apply meanshift to dst to get the new location
         ret, track_window = cv2.meanShift(dst, track_window, term_crit)
 
@@ -81,7 +95,7 @@ while(1):
         frame_tracked = cv2.rectangle(frame, (r,c), (r+h,c+w), (255,0,0) ,2)
         cv2.imshow('Sequence',frame_tracked)
 
-        k = cv2.waitKey(60) & 0xff
+        k = cv2.waitKey(180) & 0xff
         if k == 27:
             break
         elif k == ord('s'):
