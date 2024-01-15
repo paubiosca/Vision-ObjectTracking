@@ -32,7 +32,7 @@ The Hough Transform tracking with R-Table is implemented in `Tracking_R_Table.py
 - Applying the Hough Transform to detect the object in each frame based on the R-Table.
 
 ### Visualizations
-![Hough_Tracking](../ObjectTracking%20Methods/images/Tracking_Hough.png)
+![Hough_Tracking](./images/Tracking_Hough.png)
 
 
 ## Usage
