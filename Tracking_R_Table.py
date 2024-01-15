@@ -16,120 +16,154 @@ def define_ROI(event, x, y, flags, param):
         r = min(r, r2)
         c = min(c, c2)
         roi_defined = True
+    
 
-def calculate_gradient(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    grad_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=5)
-    grad_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=5)
-    magnitude = cv2.magnitude(grad_x, grad_y)
-    orientation = cv2.phase(grad_x, grad_y, angleInDegrees=True)
-    return magnitude, orientation
+def build_r_table(roi_grey):
+    """Build R_Table for ROI object 
 
-def build_r_table(orientation, magnitude_threshold):
+    Args:
+        roi_grey: Image of the ROI in Grey.
+        
+        return: r_table: (key: absolute of orientation | values: displacement vectors)
+    """
+    def calculate_gradient(image_grey):
+        grad_x = cv2.Sobel(image_grey, cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(image_grey, cv2.CV_64F, 0, 1, ksize=3)
+        magnitude = cv2.magnitude(grad_x, grad_y)
+        orientation = cv2.phase(grad_x, grad_y, angleInDegrees=True)
+        
+        return magnitude, orientation
+    
+    magnitude, orientation = calculate_gradient(roi_grey)
+    magnitude_threshold = np.mean(magnitude)
+    print(f"Magnitude threshold ROI: {magnitude_threshold}")
+    
     r_table = {}
-    height, width = orientation.shape[:2]
+    height, width = roi_grey.shape[:2]
     cy, cx = height // 2, width // 2  # Assuming center coordinates
 
     for i in range(height):
         for j in range(width):
             value = orientation[i, j]
             if magnitude[i, j] > magnitude_threshold:
-                if value not in r_table:
-                    r_table[value] = []
-                r_table[value].append((cy - i, cx - j))
+                angle = int(np.abs(value))
+                if angle not in r_table:
+                    r_table[angle] = []
+                r_table[angle].append((cy - i, cx - j))
     return r_table
 
-def hough_transform(image, r_table):
-    image_grey = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+def hough_transform(image_grey, r_table):
+    """
+    :param image_grey: input original image (grey)
+    :param r_table: table for template
+    :return:
+        accumulator with searched votes
+    """
+    
+    def calculate_gradient(image_grey):
+        grad_x = cv2.Sobel(image_grey, cv2.CV_64F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(image_grey, cv2.CV_64F, 0, 1, ksize=3)
+        magnitude = cv2.magnitude(grad_x, grad_y)
+        orientation = cv2.phase(grad_x, grad_y, angleInDegrees=True)
+        
+        return magnitude, orientation
+    
     height, width = image_grey.shape[:2]
-    accumulator = np.zeros((height, width), dtype=np.uint64)
+    accumulator = np.zeros((height + 50, width + 50))
 
+    magnitude, orientation = calculate_gradient(image_grey)
+    magnitude_threshold = np.mean(magnitude)
+    print(f"Magnitude threshold frame: {magnitude_threshold}")
+    assert(magnitude.shape == image_grey.shape[:2])
+    
     for i in range(height):
         for j in range(width):
-            value = image_grey[i, j]
-            if (value > 0):  # Check if any value in the array is greater than 0
-                if value in r_table:
-                    for r, theta in r_table[value]:
-                        a = int(j + r * np.cos(np.radians(theta)))
-                        b = int(i + r * np.sin(np.radians(theta)))
-                        if 0 <= a < width and 0 <= b < height:
-                            accumulator[b, a] += 1
+            if (magnitude[i, j] > magnitude_threshold):
+                theta = int(np.abs(orientation[i, j]))
+                vectors = r_table[theta]
+                for vector in vectors:
+                    accumulator[vector[0] + i, vector[1] + j] += 1
 
     return accumulator
 
 
-def display_detection(image, argmax_result):
-    print(argmax_result)
-    print(np.unravel_index(argmax_result, image.shape))
-    r, c = np.unravel_index(argmax_result, image.shape)
-    cv2.circle(image, (c, r), 10, (0, 0, 255), 2)  # Red circle at the detected location
+def display_detection(accumulator, image):
+    def find_maximum(accumulator):
+        rowId, colId = np.unravel_index(accumulator.argmax(), accumulator.shape)
+        return rowId, colId
+    
+    r, c = find_maximum(accumulator)
+    cv2.circle(image, (c, r), 10, (0, 0, 255), 5)
 
-cwd = os.getcwd()
-print(cwd)
 
-# Open the video file
-dir_path = os.path.dirname(os.path.realpath(__file__))
-video_path = os.path.join(dir_path, 'Test-Videos', 'VOT-Ball.mp4')
 
-# Initialize variables and video capture
-roi_defined = False
-cap = cv2.VideoCapture(video_path)
-ret, frame = cap.read()
-clone = frame.copy()
-cv2.namedWindow("First image")
-cv2.setMouseCallback("First image", define_ROI)
+def main():
+    cwd = os.getcwd()
+    print(cwd)
 
-# Variables for tracking
-track_window = None
-roi_hist = None
-term_crit = None
+    # Open the video file
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    video_path = os.path.join(dir_path, 'Test-Videos', 'VOT-Ball.mp4')
 
-while True:
-    cv2.imshow("First image", frame)
-    key = cv2.waitKey(1) & 0xFF
-    if roi_defined:
-        cv2.rectangle(frame, (r, c), (r + h, c + w), (0, 255, 0), 2)
-        track_window = (r, c, h, w)
-        roi = frame[c:c + w, r:r + h]
-        hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv_roi, np.array((0., 30., 20.)), np.array((180., 255., 235.)))
-        roi_hist = cv2.calcHist([hsv_roi], [0], mask, [180], [0, 180])
-        cv2.normalize(roi_hist, roi_hist, 0, 255, cv2.NORM_MINMAX)
-        term_crit = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1)
-        break
-    else:
-        frame = clone.copy()
-    if key == ord("q"):
-        break
-
-cpt = 1
-while True:
+    # Initialize variables and video capture
+    roi_defined = False
+    cap = cv2.VideoCapture(video_path)
     ret, frame = cap.read()
-    if ret:
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    clone = frame.copy()
+    cv2.namedWindow("First image")
+    cv2.setMouseCallback("First image", define_ROI)
 
-        # Compute gradient orientation and magnitude
-        magnitude, orientation = calculate_gradient(frame)
+    # Variables for tracking
+    track_window = None
+    roi_hist = None
+    term_crit = None
 
-        r_table = build_r_table(orientation, magnitude_threshold=100)
-        accumulator = hough_transform(frame, r_table)
-
-        # Find the location of the maximum value in the accumulator
-        max_loc = np.unravel_index(np.argmax(accumulator), accumulator.shape)
-        
-        # Display the detection by argmax
-        display_detection(frame, max_loc)
-
-        cv2.imshow('Frame with Detection', frame)
-
-        k = cv2.waitKey(60) & 0xff
-        if k == 27:
+    while True:
+        cv2.imshow("First image", frame)
+        key = cv2.waitKey(1) & 0xFF
+        if roi_defined:
+            cv2.rectangle(frame, (r, c), (r + h, c + w), (0, 255, 0), 2)
+            track_window = (r, c, h, w)
+            roi = frame[c:c + w, r:r + h]
+            hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            mask = cv2.inRange(hsv_roi, np.array((0., 30., 20.)), np.array((180., 255., 235.)))
+            roi_hist = cv2.calcHist([hsv_roi], [0], mask, [180], [0, 180])
+            cv2.normalize(roi_hist, roi_hist, 0, 255, cv2.NORM_MINMAX)
+            term_crit = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1)
             break
-        elif k == ord('s'):
-            cv2.imwrite('Frame_%04d.png' % cpt, frame)
-        cpt += 1
-    else:
-        break
+        else:
+            frame = clone.copy()
+        if key == ord("q"):
+            break
 
-cv2.destroyAllWindows()
-cap.release()
+    cpt = 1
+    while True:
+        ret, frame = cap.read()
+        if ret:
+            # Compute gradient orientation and magnitude
+            roi_grey = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            r_table = build_r_table(roi_grey)
+            
+            frame_grey = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            accumulator = hough_transform(frame_grey, r_table)
+            
+            # Display the detection by argmax
+            display_detection(accumulator, frame_grey)
+
+            # Necessary??
+            # cv2.imshow('Frame with Detection', frame)
+
+            k = cv2.waitKey(60) & 0xff
+            if k == 27:
+                break
+            elif k == ord('s'):
+                cv2.imwrite('Frame_%04d.png' % cpt, frame)
+            cpt += 1
+        else:
+            break
+
+    cv2.destroyAllWindows()
+    cap.release()
+    
+if __name__ == '__main__':
+    main()
