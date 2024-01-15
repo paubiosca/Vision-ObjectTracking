@@ -39,8 +39,9 @@ The Hough Transform tracking with R-Table is implemented in `Tracking_R_Table.py
 To run the tracking algorithms, execute the respective Python scripts:
 ```bash
 python Tracking_MeanShift.py
+```
 
-```python
+```bash
 python Tracking_R_Table.py
 ```
 
