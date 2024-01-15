@@ -2,6 +2,8 @@ import numpy as np
 import cv2
 import os
 
+from utils import calculate_histogram, calculate_gradient_orientation, masked_orientations
+
 roi_defined = False
  
 def define_ROI(event, x, y, flags, param):
@@ -71,38 +73,49 @@ cv2.normalize(roi_hist,roi_hist,0,255,cv2.NORM_MINMAX)
 term_crit = ( cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1 )
 
 cpt = 1
-while(1):
-    ret ,frame = cap.read()
-    if ret == True:
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        
-        # Display Hue Image
-        hue_image = hsv[:,:,0]
-        cv2.imshow('Hue Channel', hue_image)
-        
-		# Backproject the model histogram roi_hist onto the 
-		# current image hsv, i.e. dst(x,y) = roi_hist(hsv(0,x,y))
-        dst = cv2.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
-        
-        # Display Weight Image
-        cv2.imshow('BackProjection', dst)
-        
-        # apply meanshift to dst to get the new location
-        ret, track_window = cv2.meanShift(dst, track_window, term_crit)
+while True:
+	ret, frame = cap.read()
+	if ret:
+		hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # Draw a blue rectangle on the current image
-        r,c,h,w = track_window
-        frame_tracked = cv2.rectangle(frame, (r,c), (r+h,c+w), (255,0,0) ,2)
-        cv2.imshow('Sequence',frame_tracked)
+		# Compute gradient orientation and magnitude
+		gradient_magnitude, gradient_orientation = calculate_gradient_orientation(frame)
 
-        k = cv2.waitKey(180) & 0xff
-        if k == 27:
-            break
-        elif k == ord('s'):
-            cv2.imwrite('Frame_%04d.png'%cpt,frame_tracked)
-        cpt += 1
-    else:
-        break
+		# Create separate windows for each image and move them to different positions
+		cv2.imshow('Gradient Magnitude', gradient_magnitude)
+		cv2.moveWindow('Gradient Magnitude', 0, 400)  # Adjust the position as needed
+
+		cv2.imshow('Gradient Orientation', gradient_orientation)
+		cv2.moveWindow('Gradient Orientation', 400, 0)  # Adjust the position as needed
+
+		masked_orientation = masked_orientations(frame)
+		cv2.imshow('Masked Orientation', masked_orientation)
+		cv2.moveWindow('Masked Orientation', 400, 400)
+
+		hue_image = hsv[:,:,0]
+		cv2.imshow('Hue Channel', hue_image)
+		cv2.moveWindow('Hue Channel', 800, 400)  # Adjust the position as needed
+
+		dst = cv2.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
+		cv2.imshow('BackProjection', dst)
+		cv2.moveWindow('BackProjection', 800, 0)  # Adjust the position as needed
+
+		ret, track_window = cv2.meanShift(dst, track_window, term_crit)
+		r, c, h, w = track_window
+		frame_tracked = cv2.rectangle(frame, (r, c), (r+h, c+w), (255, 0, 0), 2)
+		cv2.imshow('Original', frame_tracked)
+		cv2.moveWindow('Original', 0, 0)  # Adjust the position as needed
+        
+        
+
+		k = cv2.waitKey(60) & 0xff
+		if k == 27:
+			break
+		elif k == ord('s'):
+			cv2.imwrite('Frame_%04d.png' % cpt, frame_tracked)
+		cpt += 1
+	else:
+		break
 
 cv2.destroyAllWindows()
 cap.release()
