@@ -28,7 +28,7 @@ print(cwd)
 
 # Open the video file
 dir_path = os.path.dirname(os.path.realpath(__file__))
-video_path = os.path.join(dir_path, 'Test-Videos', 'VOT-Ball.mp4')
+video_path = os.path.join(dir_path, 'Test-Videos', 'VOT-Car.mp4')
 cap = cv2.VideoCapture(video_path)
 
 # take first frame of the video
@@ -47,6 +47,7 @@ while True:
 	if (roi_defined):
 		# draw a green rectangle around the region of interest
 		cv2.rectangle(frame, (r,c), (r+h,c+w), (0, 255, 0), 2)
+		# pass
 	# else reset the image...
 	else:
 		frame = clone.copy()
@@ -72,50 +73,47 @@ cv2.normalize(roi_hist,roi_hist,0,255,cv2.NORM_MINMAX)
 # or move by less than 1 pixel
 term_crit = ( cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1 )
 
+
 cpt = 1
 while True:
-	ret, frame = cap.read()
-	if ret:
-		hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    ret, frame = cap.read()
+    if ret:
+        height, width, _ = frame.shape  # Get the height and width of the frame
 
-		# Compute gradient orientation and magnitude
-		gradient_magnitude, gradient_orientation = calculate_gradient_orientation(frame)
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-		# Create separate windows for each image and move them to different positions
-		cv2.imshow('Gradient Magnitude', gradient_magnitude)
-		cv2.moveWindow('Gradient Magnitude', 0, 400)  # Adjust the position as needed
+        gradient_magnitude, gradient_orientation = calculate_gradient_orientation(frame)
 
-		cv2.imshow('Gradient Orientation', gradient_orientation)
-		cv2.moveWindow('Gradient Orientation', 400, 0)  # Adjust the position as needed
+        cv2.imshow('Gradient Magnitude', gradient_magnitude)
+        cv2.moveWindow('Gradient Magnitude', 0, height)  # Move to (0, height)
 
-		masked_orientation = masked_orientations(frame)
-		cv2.imshow('Masked Orientation', masked_orientation)
-		cv2.moveWindow('Masked Orientation', 400, 400)
+        cv2.imshow('Gradient Orientation', gradient_orientation)
+        cv2.moveWindow('Gradient Orientation', width, 0)  # Move to (width, 0)
 
-		hue_image = hsv[:,:,0]
-		cv2.imshow('Hue Channel', hue_image)
-		cv2.moveWindow('Hue Channel', 800, 400)  # Adjust the position as needed
+        masked_orientation = masked_orientations(frame)
+        cv2.imshow('Masked Orientation', masked_orientation)
+        cv2.moveWindow('Masked Orientation', width, height)  # Move to (width, height)
 
-		dst = cv2.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
-		cv2.imshow('BackProjection', dst)
-		cv2.moveWindow('BackProjection', 800, 0)  # Adjust the position as needed
+        dst = cv2.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
+        # cv2.imshow('BackProjection', dst)
+        # cv2.moveWindow('BackProjection', 800, 0)  # Adjust the position as needed
 
-		ret, track_window = cv2.meanShift(dst, track_window, term_crit)
-		r, c, h, w = track_window
-		frame_tracked = cv2.rectangle(frame, (r, c), (r+h, c+w), (255, 0, 0), 2)
-		cv2.imshow('Original', frame_tracked)
-		cv2.moveWindow('Original', 0, 0)  # Adjust the position as needed
-        
-        
+        ret, track_window = cv2.meanShift(dst, track_window, term_crit)
+        r, c, h, w = track_window
+        frame_tracked = cv2.rectangle(frame, (r, c), (r+h, c+w), (255, 0, 0), 2)
+        cv2.imshow('Original', frame_tracked)
+        # cv2.imshow('Original', frame)
+        cv2.moveWindow('Original', 0, 0)  # Adjust the position as needed
 
-		k = cv2.waitKey(60) & 0xff
-		if k == 27:
-			break
-		elif k == ord('s'):
-			cv2.imwrite('Frame_%04d.png' % cpt, frame_tracked)
-		cpt += 1
-	else:
-		break
+        k = cv2.waitKey(60) & 0xff
+        if k == 27:
+            break
+        elif k == ord('s'):
+            cv2.imwrite('Frame_%04d.png' % cpt, frame_tracked)
+        cpt += 1
+    else:
+        break
 
 cv2.destroyAllWindows()
 cap.release()
+
